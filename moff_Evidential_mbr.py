@@ -44,12 +44,12 @@ def MD_removeOutliers(x, y, width):
             outliers.append(i)  # position of removed pair
     return (np.array(nx), np.array(ny), np.array(outliers))
 
-
+##  crete ate the power set
 def powerset(iterable):
     "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
     s = list(iterable)
     return chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
-
+## create dictionary for possible set name .
 def create_dict_frame(pos_index):
     let= np.array( list(map(chr, range(97, 97 +len(pos_index)))) )
     map_inter = {}
@@ -60,26 +60,46 @@ def create_dict_frame(pos_index):
             map_inter[  ''.join(str(pos_index[list(i)].tolist()))  ]= ''.join(let[list(i)].tolist())
     return map_inter
 
+def define_frame(x, model ,intervall):
+     #//----   union of the set
+    offset = 1
+    if  x[np.isnan(x)].shape[0] == 0:
+        # init  no one nan values
+        pos= bisect.bisect(intervall[1,:].tolist(),model[0].predict(x[0])[0][0])
+        val = model[1].predict(x[0])[0][0]
+        init_union = np.array([pos-1,pos,pos+1])
+    else:
+        if np.isnan(x[0]) :
+            ## caso fisrt element is nana
+            pos= bisect.bisect(intervall[1,:].tolist(),model[0].predict(x[1])[0][0])
+            val = model[1].predict(x[1])[0][0]
+            init_union = np.array([pos-1,pos,pos+1])
+            offset = 2
+        else:
+            ## caso first element ==0
+            pos= bisect.bisect(intervall[1,:].tolist(),model[0].predict(x[0])[0][0])
+            val = model[1].predict(x[0])[0][0]
+            init_union = np.array([pos-1,pos,pos+1])
+    for ii in range(1, len(x)):
+        if  ~  np.isnan(x[ii]):
+            pos= bisect.bisect(intervall[1,:].tolist(),model[ii].predict(x[ii])[0][0])
+            val = model[ii].predict(x[ii])[0][0]
+            pos_app = np.array([pos-1,pos,pos+1])
+            init_union = np.union1d(pos_app,init_union  )
+         #print 'frame', ii, pos_app
+    return init_union
 
 # combination of rt predicted by each single model
 def mass_assignment(x, model, err, weight_flag,intervall):
-
+    ## check if something is null
     x = x.values
     tot_err = np.sum(np.array(err)[np.where(~np.isnan(x))])
     bba_input= []
-    print intervall.shape ,'number '
-    #//----   union of the set
-    pos= bisect.bisect(intervall[1,:].tolist(),model[0].predict(x[0])[0][0])
-    val = model[0].predict(x[0])[0][0]
-    pos_inex_union = np.array([pos-1,pos,pos+1])
-    for ii in range(1, len(x)):
-         pos= bisect.bisect(intervall[1,:].tolist(),model[ii].predict(x[ii])[0][0])
-         val = model[ii].predict(x[ii])[0][0]
-         pos_app = np.array([pos-1,pos,pos+1])
-         pos_inex_union = np.union1d(pos_app,pos_inex_union  )
-         print 'frame', ii, pos_app
-    #
-    print 'frame', pos_inex_union
+    print '------   ------'
+    print 'input values ', x
+    #print intervall.shape ,'number '
+    pos_inex_union= define_frame(x, model, intervall )
+    print 'frame final ', pos_inex_union
     out_map = create_dict_frame(pos_inex_union )
     #//---- end frame computation
     for ii in range(0, len(x)):
@@ -116,7 +136,9 @@ def mass_assignment(x, model, err, weight_flag,intervall):
             print 'bba',ii,m1
             bba_input.append(m1)
 
-    print('Dempster\'s combination rule for m_1 and m_2 =', bba_input[0] & bba_input[1])
+    print bba_input
+    print '--- -----'
+    #print('Dempster\'s combination rule for m_1 and m_2 =', bba_input[0] & bba_input[1])
 
     # " output weighted mean
     if int(weight_flag) == 1:
@@ -385,7 +407,7 @@ def run_mbr(args):
                                     model_err[(jj * (n_replicates - 1)):((jj + 1) * (n_replicates - 1))], args.w_comb,interval),
             axis=1)
         test['matched'] = 1
-
+        exit()
         # if test[test['time_pred'] <= 0].shape[0] >= 1  :
         #	log_mbr.info(' -- Predicted negative RT : those peptide will be deleted')
         #	test= test[test['time_pred'] > 0]
