@@ -54,12 +54,15 @@ def powerset(iterable):
 def create_dict_frame(pos_index):
     let= np.array( list(map(chr, range(97, 97 +len(pos_index)))) )
     map_inter = {}
+    map_set2_inter = {}
     for i in powerset( list(range(0,len(pos_index)) )):
         if ( len(i) == 1 ):
             map_inter[pos_index[i]] = let[i]
+            map_set2_inter [ let[i] ] = pos_index[i]
         else:
             map_inter[  ''.join(str(pos_index[list(i)].tolist()))  ]= ''.join(let[list(i)].tolist())
-    return map_inter
+            map_set2_inter [ ''.join(let[list(i)].tolist())  ] = ''.join(str(pos_index[list(i)].tolist()))
+    return map_inter,map_set2_inter
 
 def define_frame(x, model ,intervall):
      #//----   union of the set
@@ -91,7 +94,7 @@ def define_frame(x, model ,intervall):
     return init_union
 
 # combination of rt predicted by each single model
-def mass_assignment(x, model, err, weight_flag,intervall):
+def mass_assignment(x, model, err, weight_flag,intervall,k,r):
     x = x.values
     #tot_err = np.sum(np.array(err)[np.where(~np.isnan(x))])
     if x[~ np.isnan(x)].shape[0] == 1:
@@ -105,7 +108,7 @@ def mass_assignment(x, model, err, weight_flag,intervall):
     #print intervall.shape ,'number '
     pos_inex_union= define_frame(x, model, intervall )
     print 'frame final ', pos_inex_union
-    out_map = create_dict_frame(pos_inex_union )
+    out_map,out_map_set = create_dict_frame(pos_inex_union )
     #//---- end frame computation
     for ii in range(0, len(x)):
         if ~  np.isnan(x[ii]):
@@ -118,7 +121,7 @@ def mass_assignment(x, model, err, weight_flag,intervall):
             #print intervall[:,po,s]
             #print abs( val - intervall[1,pos-1]  ), abs( val - intervall[1,pos]  ),abs( val - intervall[1,pos+1]  )
             #print  np.exp( - 0.9 *  abs( val - intervall[1,pos-1]  )), np.exp( - 0.9 *  abs( val - intervall[1,pos]  )),np.exp( - 0.9 *  abs( val - intervall[1,pos+1]  ))
-            val_v = np.array( [np.exp( - 0.9 *  abs( val - intervall[1,pos-1]  )),np.exp( - 0.9 *  abs( val - intervall[1,pos]  )),np.exp( - 0.9 *  abs( val - intervall[1,pos+1]  ))] )
+            val_v = np.array( [np.exp( - k *  abs( val - intervall[1,pos-1]  )),np.exp( - k *  abs( val - intervall[1,pos]  )),np.exp( - k *  abs( val - intervall[1,pos+1]  ))] )
             print 'belief ', ii, val_v
 
             m1 = MassFunction()
@@ -127,21 +130,32 @@ def mass_assignment(x, model, err, weight_flag,intervall):
             #print 'best int', final_pos[1],   np.exp( - 0.9 *  abs( val - intervall[1, final_pos[1]]  ))
             app =   pos_index[np.argsort(val_v)[-1:]].tolist()
             #print app, out_map[app[0]]
-            m1[out_map[app[0]] ]= np.exp( - 0.9 *  abs( val - intervall[1, final_pos[1]]  ))
+            m1[out_map[app[0]] ]= np.exp( - k *  abs( val - intervall[1, final_pos[1]]  ))
             #print 'uncertanty', final_pos, 1- np.exp( - 0.9 *  abs( val - intervall[1, final_pos[1]]  ))
             app = pos_index[np.argsort(val_v)[-2:]]
             if    out_map.has_key( ''.join((str(app.tolist()))) ) :
-                m1[  out_map[  ''.join((str(app.tolist())))  ]]= 1- np.exp( - 0.9 *  abs( val - intervall[1, final_pos[1]]  ))
+                m1[  out_map[  ''.join((str(app.tolist())))  ]]= 1- np.exp( - k *  abs( val - intervall[1, final_pos[1]]  ))
             else:
                 # swap
                 app[0], app[1] = app[1], app[0]
                 key_s = ''.join((str(app.tolist())))
                 #print key_s, out_map[key_s]
-                m1[  out_map[key_s]]= 1- np.exp( - 0.9 *  abs( val - intervall[1, final_pos[1]]  ))
+                m1[  out_map[key_s]]= 1- np.exp( - k *  abs( val - intervall[1, final_pos[1]]  ))
             print 'bba',ii,m1
             bba_input.append(m1)
 
     print bba_input
+    m_comb =  bba_input[0] & bba_input[1]
+    m_comb.pignistic()
+    max_set=0
+    set_res= ''
+    for s in  m_comb.pignistic().keys():
+        if m_comb[s] > max_set:
+            set_res = s
+
+    output = ( intervall[1,int(out_map_set[list(s)[0]])] +( r * ( 1 - m_comb.pignistic()[s]))  - intervall[1,int(out_map_set[list(s)[0]])] +( r * ( 1 - m_comb.pignistic()[s])) ) / 2
+    print 'evidential val ' , output, intervall[1,int(out_map_set[list(s)[0]])]
+    print 'old_approach', combine_model(x, model, err, weight_flag)
     print '--- -----'
     #print('Dempster\'s combination rule for m_1 and m_2 =', bba_input[0] & bba_input[1])
 
@@ -188,7 +202,7 @@ def check_columns_name(col_list, col_must_have):
 def	create_belief_RT_interval (max_rt, min_rt,n_interval):
     # print max_rt, min_rt, float(max_rt-min_rt) / float(20)
 	off_set = float(max_rt-min_rt) / float(n_interval)
-	print 'length_interval',off_set
+	#print 'length_interval',off_set
 	interval_mat  = np.zeros(shape=(3,n_interval))
 	for i in range(0,n_interval):
 		#print i , min_rt + (i * off_set )
@@ -197,7 +211,7 @@ def	create_belief_RT_interval (max_rt, min_rt,n_interval):
 		interval_mat[1,i] = (interval_mat[0,i] + interval_mat[2,i] ) /2
 
 	print interval_mat[:,0], interval_mat[:,19]
-	return interval_mat
+	return interval_mat,off_set
 
 
 ## run the mbr in moFF : input  ms2 identified peptide   output csv file with the matched peptides added
@@ -274,7 +288,7 @@ def run_mbr(args):
         #print data_moff['rt'].min(), data_moff['rt'].max()
 
     # 20 intervalli
-	interval = create_belief_RT_interval( max_RT,min_RT,700 )
+	interval,l_int = create_belief_RT_interval( max_RT,min_RT,100 )
 
     print 'Read input --> done '
     n_replicates = len(exp_t)
@@ -409,8 +423,7 @@ def run_mbr(args):
 
         test['time_pred'] = test.ix[:, 5: (5 + (n_replicates - 1))].apply(
             lambda x: mass_assignment(x, model_save[(jj * (n_replicates - 1)):((jj + 1) * (n_replicates - 1))],
-                                    model_err[(jj * (n_replicates - 1)):((jj + 1) * (n_replicates - 1))], args.w_comb,interval),
-            axis=1)
+                                    model_err[(jj * (n_replicates - 1)):((jj + 1) * (n_replicates - 1))], args.w_comb,interval, 1,(l_int /2) ) ,axis=1)
         test['matched'] = 1
         exit()
         # if test[test['time_pred'] <= 0].shape[0] >= 1  :
