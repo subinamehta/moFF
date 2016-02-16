@@ -1,8 +1,3 @@
-import pandas as pd
-import numpy as np
-from scipy.interpolate import interp1d
-from sklearn import linear_model
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import logging
 import itertools
 import os
@@ -13,6 +8,12 @@ import ast
 import copy
 import bisect
 from itertools import chain, combinations
+
+import pandas as pd
+import numpy as np
+from sklearn import linear_model
+from sklearn.metrics import mean_absolute_error
+
 from pyds import MassFunction
 
 
@@ -71,16 +72,16 @@ def define_frame(x, model ,intervall):
     else:
         if np.isnan(x[0]) :
             ## caso fisrt element is nana
-            pos= bisect.bisect(intervall[1,:].tolist(),model[0].predict(x[1])[0][0])
+            pos = bisect.bisect(intervall[1, :].tolist(), model[1].predict(x[1])[0][0])
             val = model[1].predict(x[1])[0][0]
             init_union = np.array([pos-1,pos,pos+1])
             offset = 2
         else:
             ## caso first element ==0
             pos= bisect.bisect(intervall[1,:].tolist(),model[0].predict(x[0])[0][0])
-            val = model[1].predict(x[0])[0][0]
+            val = model[0].predict(x[0])[0][0]
             init_union = np.array([pos-1,pos,pos+1])
-    for ii in range(1, len(x)):
+    for ii in range(offset, len(x)):
         if  ~  np.isnan(x[ii]):
             pos= bisect.bisect(intervall[1,:].tolist(),model[ii].predict(x[ii])[0][0])
             val = model[ii].predict(x[ii])[0][0]
@@ -91,9 +92,13 @@ def define_frame(x, model ,intervall):
 
 # combination of rt predicted by each single model
 def mass_assignment(x, model, err, weight_flag,intervall):
-    ## check if something is null
     x = x.values
-    tot_err = np.sum(np.array(err)[np.where(~np.isnan(x))])
+    #tot_err = np.sum(np.array(err)[np.where(~np.isnan(x))])
+    if x[~ np.isnan(x)].shape[0] == 1:
+        # run normal combination.
+        # it does not make sense to combine with just one expert
+        return combine_model(x, model, err, weight_flag)
+
     bba_input= []
     print '------   ------'
     print 'input values ', x
@@ -151,7 +156,7 @@ def mass_assignment(x, model, err, weight_flag,intervall):
 
 # combination of rt predicted by each single model
 def combine_model(x, model, err, weight_flag):
-    x = x.values
+    # x = x.values
     tot_err = np.sum(np.array(err)[np.where(~np.isnan(x))])
 
     app_sum = 0
@@ -181,7 +186,7 @@ def check_columns_name(col_list, col_must_have):
     return 0
 
 def	create_belief_RT_interval (max_rt, min_rt,n_interval):
-	#print max_rt, min_rt, float(max_rt-min_rt) / float(20)
+    # print max_rt, min_rt, float(max_rt-min_rt) / float(20)
 	off_set = float(max_rt-min_rt) / float(n_interval)
 	print 'length_interval',off_set
 	interval_mat  = np.zeros(shape=(3,n_interval))
