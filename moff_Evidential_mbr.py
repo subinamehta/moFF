@@ -64,6 +64,28 @@ def create_dict_frame(pos_index):
             map_set2_inter [ ''.join(let[list(i)].tolist())  ] = ''.join(str(pos_index[list(i)].tolist()))
     return map_inter,map_set2_inter
 
+## methods for n expert in input
+def focal_set_union (bba_set):
+    app=  bba_set[0].core()
+    for ii in range(1,len(bba_set)):
+            app = app.intersection(bba_set[ii].core())
+    return app
+
+
+def conj_bba_set(bba_set):
+    app=  bba_set[0]
+    for ii in range(1,len(bba_set)):
+            app = app.combine_conjunctive(bba_set[ii])
+    return app
+
+
+def disj_bba_set(bba_set):
+    app=  bba_set[0]
+    for ii in range(1,len(bba_set)):
+            app = app.combine_disjunctive(bba_set[ii])
+    return app
+
+## union of the frame
 def define_frame(x, model ,intervall):
      #//----   union of the set
     offset = 1
@@ -142,10 +164,10 @@ def mass_assignment(x, model, err, weight_flag,intervall,k,r):
             bba_input.append(m1)
 
     print 'combined_masses', bba_input
-    print bba_input[0].core().intersection(bba_input[1].core())
-    if len(bba_input[0].core().intersection(bba_input[1].core()))  > 0 :
-        m_comb= bba_input[0].combine_conjunctive(bba_input[1])
-        print('Dempster\'s combination rule for m_1 and m_2 =', bba_input[0]  & bba_input[1] )
+    print focal_set_union(bba_input)
+    if focal_set_union(bba_input) > 0 :
+        m_comb=  conj_bba_set(bba_input)
+        print('Dempster\'s combination rule for m_1 and m_2 =', m_comb )
         print 'conflict',  m_comb.local_conflict()
         print 'pig_trans', m_comb.pignistic()
         max_set=0
@@ -159,8 +181,8 @@ def mass_assignment(x, model, err, weight_flag,intervall,k,r):
         print r * ( 1 - m_comb.pignistic()[set_res])
         print output
     else:
-        m_comb= bba_input[0].combine_disjunctive(bba_input[1])
-        print(' Disjuntive combination rule for m_1 and m_2 =', bba_input[0]  | bba_input[1] )
+        m_comb= disj_bba_set(bba_input)
+        print(' Disjuntive combination rule for m_1 and m_2 =', m_comb )
         print 'conflict',  m_comb.local_conflict()
         print 'pig_trans', m_comb.pignistic()
         max_set=0
