@@ -96,7 +96,6 @@ def define_frame(x, model ,intervall):
 # combination of rt predicted by each single model
 def mass_assignment(x, model, err, weight_flag,intervall,k,r):
     x = x.values
-    #tot_err = np.sum(np.array(err)[np.where(~np.isnan(x))])
     if x[~ np.isnan(x)].shape[0] == 1:
         # run normal combination.
         # it does not make sense to combine with just one expert
@@ -105,7 +104,7 @@ def mass_assignment(x, model, err, weight_flag,intervall,k,r):
     bba_input= []
     print '------   ------'
     print 'input values ', x
-    #print intervall.shape ,'number '
+    print 'radios in min', r,'# interval', intervall.shape
     pos_inex_union= define_frame(x, model, intervall )
     print 'frame final ', pos_inex_union
     out_map,out_map_set = create_dict_frame(pos_inex_union )
@@ -113,25 +112,23 @@ def mass_assignment(x, model, err, weight_flag,intervall,k,r):
     for ii in range(0, len(x)):
         if ~  np.isnan(x[ii]):
             pos= bisect.bisect(intervall[1,:].tolist(),model[ii].predict(x[ii])[0][0])
+            print 'interval',ii, pos
             val = model[ii].predict(x[ii])[0][0]
             pos_index=np.array([pos-1,pos,pos+1])
 
-            print 'output_values',ii ,model[ii].predict(x[ii])[0][0]
-            print 'frame', ii, pos_index
+            #print 'output_values',ii ,model[ii].predict(x[ii])[0][0]
+            #print 'frame', ii, pos_index
+
             #print intervall[:,po,s]
             #print abs( val - intervall[1,pos-1]  ), abs( val - intervall[1,pos]  ),abs( val - intervall[1,pos+1]  )
             #print  np.exp( - 0.9 *  abs( val - intervall[1,pos-1]  )), np.exp( - 0.9 *  abs( val - intervall[1,pos]  )),np.exp( - 0.9 *  abs( val - intervall[1,pos+1]  ))
+
             val_v = np.array( [np.exp( - k *  abs( val - intervall[1,pos-1]  )),np.exp( - k *  abs( val - intervall[1,pos]  )),np.exp( - k *  abs( val - intervall[1,pos+1]  ))] )
             print 'belief ', ii, val_v
-
             m1 = MassFunction()
-
             final_pos= pos + (np.argsort(val_v)[-2:] -1)  # I take just the best two
-            #print 'best int', final_pos[1],   np.exp( - 0.9 *  abs( val - intervall[1, final_pos[1]]  ))
             app =   pos_index[np.argsort(val_v)[-1:]].tolist()
-            #print app, out_map[app[0]]
             m1[out_map[app[0]] ]= np.exp( - k *  abs( val - intervall[1, final_pos[1]]  ))
-            #print 'uncertanty', final_pos, 1- np.exp( - 0.9 *  abs( val - intervall[1, final_pos[1]]  ))
             app = pos_index[np.argsort(val_v)[-2:]]
             if    out_map.has_key( ''.join((str(app.tolist()))) ) :
                 m1[  out_map[  ''.join((str(app.tolist())))  ]]= 1- np.exp( - k *  abs( val - intervall[1, final_pos[1]]  ))
@@ -141,27 +138,47 @@ def mass_assignment(x, model, err, weight_flag,intervall,k,r):
                 key_s = ''.join((str(app.tolist())))
                 #print key_s, out_map[key_s]
                 m1[  out_map[key_s]]= 1- np.exp( - k *  abs( val - intervall[1, final_pos[1]]  ))
-            print 'bba',ii,m1
+            #print 'bba',ii,m1
             bba_input.append(m1)
 
-    print bba_input
-    m_comb =  bba_input[0] & bba_input[1]
-    m_comb.pignistic()
-    max_set=0
-    set_res= ''
-    for s in  m_comb.pignistic().keys():
-        if m_comb[s] > max_set:
-            set_res = s
-
-    output = ( intervall[1,int(out_map_set[list(s)[0]])] +( r * ( 1 - m_comb.pignistic()[s]))  - intervall[1,int(out_map_set[list(s)[0]])] +( r * ( 1 - m_comb.pignistic()[s])) ) / 2
-    print 'evidential val ' , output, intervall[1,int(out_map_set[list(s)[0]])]
-    print 'old_approach', combine_model(x, model, err, weight_flag)
+    print 'combined_masses', bba_input
+    print bba_input[0].core().intersection(bba_input[1].core())
+    if len(bba_input[0].core().intersection(bba_input[1].core()))  > 0 :
+        m_comb= bba_input[0].combine_conjunctive(bba_input[1])
+        print('Dempster\'s combination rule for m_1 and m_2 =', bba_input[0]  & bba_input[1] )
+        print 'conflict',  m_comb.local_conflict()
+        print 'pig_trans', m_comb.pignistic()
+        max_set=0
+        set_res= ''
+        for s in  m_comb.pignistic().keys():
+            if m_comb[s] > max_set:
+                set_res = s
+        print list(set_res)
+        output = ( ( intervall[1,int(out_map_set[list(set_res)[0]])] +( r * ( 1 - m_comb.pignistic()[set_res])) )  +  (intervall[1,int(out_map_set[list(set_res)[0]])] - ( r * ( 1 - m_comb.pignistic()[set_res])))  ) / 2
+        print intervall[1,int(out_map_set[list(set_res)[0]])]
+        print r * ( 1 - m_comb.pignistic()[set_res])
+        print output
+    else:
+        m_comb= bba_input[0].combine_disjunctive(bba_input[1])
+        print(' Disjuntive combination rule for m_1 and m_2 =', bba_input[0]  | bba_input[1] )
+        print 'conflict',  m_comb.local_conflict()
+        print 'pig_trans', m_comb.pignistic()
+        max_set=0
+        set_res= ''
+        for s in  m_comb.pignistic().keys():
+            if m_comb[s] >= max_set:
+                set_res = s
+        print list(set_res)
+        output = (  (intervall[1,int(out_map_set[list(set_res)[0]])] +( r * ( 1 - m_comb.pignistic()[set_res])) )  + (intervall[1,int(out_map_set[list(set_res)[0]])] -( r * ( 1 - m_comb.pignistic()[set_res])) ) ) / 2
+        print output
+    #m_comb =  bba_input[0] & bba_input[1]
+        #print 'evidential val ' , output, intervall[1,int(out_map_set[list(s)[0]])]
     print '--- -----'
-    #print('Dempster\'s combination rule for m_1 and m_2 =', bba_input[0] & bba_input[1])
 
-    # " output weighted mean
-    if int(weight_flag) == 1:
-        return -1
+
+    # " output basic check control
+    if  output  > 0:
+        return output
     else:
         # output not weight
         return -1
@@ -288,7 +305,7 @@ def run_mbr(args):
         #print data_moff['rt'].min(), data_moff['rt'].max()
 
     # 20 intervalli
-	interval,l_int = create_belief_RT_interval( max_RT,min_RT,100 )
+	interval,l_int = create_belief_RT_interval( max_RT,min_RT,105 )
 
     print 'Read input --> done '
     n_replicates = len(exp_t)
@@ -406,6 +423,7 @@ def run_mbr(args):
                 pre_pep_save.append(add_pep_frame)
                 c_rt += 1
         # print 'input columns',pre_pep_save[0].columns
+
         if n_replicates == 2:
             test = pre_pep_save[0]
         else:
@@ -421,33 +439,38 @@ def run_mbr(args):
         #                            model_err[(jj * (n_replicates - 1)):((jj + 1) * (n_replicates - 1))], args.w_comb),
         #    axis=1)
 
-        test['time_pred'] = test.ix[:, 5: (5 + (n_replicates - 1))].apply(
+        test['time_ev'] = test.ix[:, 5: (5 + (n_replicates - 1))].apply(
             lambda x: mass_assignment(x, model_save[(jj * (n_replicates - 1)):((jj + 1) * (n_replicates - 1))],
                                     model_err[(jj * (n_replicates - 1)):((jj + 1) * (n_replicates - 1))], args.w_comb,interval, 1,(l_int /2) ) ,axis=1)
+        test['time_base'] = test.ix[:, 5: (5 + (n_replicates - 1))].apply(
+            lambda x: combine_model(x, model_save[(jj * (n_replicates - 1)):((jj + 1) * (n_replicates - 1))],
+                                    model_err[(jj * (n_replicates - 1)):((jj + 1) * (n_replicates - 1))], args.w_comb ) ,axis=1)
         test['matched'] = 1
-        exit()
+
         # if test[test['time_pred'] <= 0].shape[0] >= 1  :
         #	log_mbr.info(' -- Predicted negative RT : those peptide will be deleted')
         #	test= test[test['time_pred'] > 0]
 
         list_name = test.columns.tolist()
-        list_name = [w.replace('time_pred', 'rt') for w in list_name]
+        #list_name = [w.replace('time_ev', 'rt_ex') for w in list_name]
+        #list_name = [w.replace('time_base', 'rt_base') for w in list_name]
+
         test.columns = list_name
         for field in diff_field.tolist():
             test[field] = -1
         # test= test[['peptide','mass','mz','charge','prot','rt']]
 
         ## print the entire file
-        # test.(path_or_buf= output_dir + '/' + str(exp_set[jj].split('.')[0].split('/')[1]) +'_match.txt',sep='\t',index=False)
+        test.to_csv(path_or_buf= output_dir + '/' + str(os.path.split(exp_set[jj])[1].split('.')[0]) + '_match.txt',sep='\t',index=False)
         log_mbr.info('Before adding %s contains %i ', exp_set[jj], exp_t[jj].shape[0])
         exp_out[jj] = pd.concat([exp_t[jj], test], join='outer', axis=0)
         log_mbr.info('After MBR %s contains:  %i  peptides', exp_set[jj], exp_out[jj].shape[0])
         log_mbr.info('----------------------------------------------')
         print 'matched 1', exp_out[jj][exp_out[jj]['matched'] == 1].shape, exp_out[jj][
             exp_out[jj]['matched'] == 0].shape
-        exp_out[jj].to_csv(
-            path_or_buf=output_dir + '/' + str(os.path.split(exp_set[jj])[1].split('.')[0]) + '_match.txt', sep='\t',
-            index=False)
+        #exp_out[jj].to_csv(
+         #   path_or_buf=output_dir + '/' + str(os.path.split(exp_set[jj])[1].split('.')[0]) + '_match.txt', sep='\t',
+         #   index=False)
         # print os.path.split(exp_set[0])[1].split('.')[0]
 
 
@@ -462,7 +485,7 @@ if __name__ == '__main__':
                         required=False)
 
     parser.add_argument('--ext', dest='ext', action='store', default='txt',
-                        help='specify the exstension of the input file (txt as default value) ', required=False)
+                        help='specify the extension of the input file (txt as default value) ', required=False)
 
     parser.add_argument('--log_file_name', dest='log_label', default='moFF', action='store',
                         help='a label name for the log file (moFF_mbr.log as default log file name) ', required=False)
