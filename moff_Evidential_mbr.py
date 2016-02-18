@@ -88,29 +88,34 @@ def disj_bba_set(bba_set):
 ## union of the frame
 def define_frame(x, model ,intervall):
      #//----   union of the set
-    offset = 1
+    if x[8]== 101.43:
+        print 'check '
     if  x[np.isnan(x)].shape[0] == 0:
         # init  no one nan values
-        pos= bisect.bisect(intervall[1,:].tolist(),model[0].predict(x[0])[0][0])
-        val = model[1].predict(x[0])[0][0]
+        pos= bisect.bisect(intervall[1,:].tolist(),model[0].predict(x[0])[0][0]) - 1
+
         init_union = np.array([pos-1,pos,pos+1])
+        offset = 1
     else:
         if np.isnan(x[0]) :
+            first_index = np.where(~np.isnan(x))[0][0]
             ## caso fisrt element is nana
-            pos = bisect.bisect(intervall[1, :].tolist(), model[1].predict(x[1])[0][0])
-            val = model[1].predict(x[1])[0][0]
+            pos = bisect.bisect(intervall[1, :].tolist(), model[first_index].predict(x[first_index])[0][0]) - 1
+
             init_union = np.array([pos-1,pos,pos+1])
-            offset = 2
+            offset = np.where(~np.isnan(x))[0][1]
         else:
-            ## caso first element ==0
-            pos= bisect.bisect(intervall[1,:].tolist(),model[0].predict(x[0])[0][0])
-            val = model[0].predict(x[0])[0][0]
+            ## caso first element !=0
+            pos= bisect.bisect(intervall[1,:].tolist(),model[0].predict(x[0])[0][0]) - 1
+
             init_union = np.array([pos-1,pos,pos+1])
+            offset = np.where(~np.isnan(x))[0][1]
     for ii in range(offset, len(x)):
         if  ~  np.isnan(x[ii]):
-            pos= bisect.bisect(intervall[1,:].tolist(),model[ii].predict(x[ii])[0][0])
-            val = model[ii].predict(x[ii])[0][0]
+            pos= bisect.bisect(intervall[1,:].tolist(),model[ii].predict(x[ii])[0][0]) - 1
             pos_app = np.array([pos-1,pos,pos+1])
+            # check if pos could flow out of mmax number of interval
+            pos_app= pos_app[pos_app < intervall.shape[1]]
             init_union = np.union1d(pos_app,init_union  )
          #print 'frame', ii, pos_app
     return init_union
@@ -133,11 +138,12 @@ def mass_assignment(x, model, err, weight_flag,intervall,k,r):
     #//---- end frame computation
     for ii in range(0, len(x)):
         if ~  np.isnan(x[ii]):
-            pos= bisect.bisect(intervall[1,:].tolist(),model[ii].predict(x[ii])[0][0])
+            pos= bisect.bisect(intervall[1,:].tolist(),model[ii].predict(x[ii])[0][0]) - 1
             print 'interval',ii, pos
             val = model[ii].predict(x[ii])[0][0]
             pos_index=np.array([pos-1,pos,pos+1])
-
+            ## check that is not out of the limit of interval
+            pos_index= pos_index[pos_index < intervall.shape[1]]
             #print 'output_values',ii ,model[ii].predict(x[ii])[0][0]
             #print 'frame', ii, pos_index
 
@@ -165,7 +171,7 @@ def mass_assignment(x, model, err, weight_flag,intervall,k,r):
 
     print 'combined_masses', bba_input
     print focal_set_union(bba_input)
-    if focal_set_union(bba_input) > 0 :
+    if focal_set_union(bba_input)  :
         m_comb=  conj_bba_set(bba_input)
         print('Dempster\'s combination rule for m_1 and m_2 =', m_comb )
         print 'conflict',  m_comb.local_conflict()
@@ -327,7 +333,7 @@ def run_mbr(args):
         #print data_moff['rt'].min(), data_moff['rt'].max()
 
     # 20 intervalli
-	interval,l_int = create_belief_RT_interval( max_RT,min_RT,105 )
+	interval,l_int = create_belief_RT_interval( max_RT,min_RT,120 )
 
     print 'Read input --> done '
     n_replicates = len(exp_t)
