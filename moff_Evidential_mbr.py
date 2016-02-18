@@ -125,7 +125,7 @@ def mass_assignment(x, model, err, weight_flag,intervall,k,r):
     x = x.values
     if x[~ np.isnan(x)].shape[0] == 1:
         # run normal combination.
-        # it does not make sense to combine with just one expert
+    ##    # it does not make sense to combine with just one expert
         return combine_model(x, model, err, weight_flag)
 
     bba_input= []
@@ -144,14 +144,14 @@ def mass_assignment(x, model, err, weight_flag,intervall,k,r):
             pos_index=np.array([pos-1,pos,pos+1])
             ## check that is not out of the limit of interval
             pos_index= pos_index[pos_index < intervall.shape[1]]
-            #print 'output_values',ii ,model[ii].predict(x[ii])[0][0]
-            #print 'frame', ii, pos_index
+            app_val=[]
+            for aa in pos_index:
+                    app_val.append(np.exp( - k *  abs( val - intervall[1,aa])) )
+            val_v= np.array(app_val)
 
-            #print intervall[:,po,s]
-            #print abs( val - intervall[1,pos-1]  ), abs( val - intervall[1,pos]  ),abs( val - intervall[1,pos+1]  )
             #print  np.exp( - 0.9 *  abs( val - intervall[1,pos-1]  )), np.exp( - 0.9 *  abs( val - intervall[1,pos]  )),np.exp( - 0.9 *  abs( val - intervall[1,pos+1]  ))
 
-            val_v = np.array( [np.exp( - k *  abs( val - intervall[1,pos-1]  )),np.exp( - k *  abs( val - intervall[1,pos]  )),np.exp( - k *  abs( val - intervall[1,pos+1]  ))] )
+            #val_v = np.array( [np.exp( - k *  abs( val - intervall[1,pos-1]  )),np.exp( - k *  abs( val - intervall[1,pos]  )),np.exp( - k *  abs( val - intervall[1,pos+1]  ))] )
             print 'belief ', ii, val_v
             m1 = MassFunction()
             final_pos= pos + (np.argsort(val_v)[-2:] -1)  # I take just the best two
@@ -333,7 +333,7 @@ def run_mbr(args):
         #print data_moff['rt'].min(), data_moff['rt'].max()
 
     # 20 intervalli
-	interval,l_int = create_belief_RT_interval( max_RT,min_RT,120 )
+	interval,l_int = create_belief_RT_interval( max_RT,min_RT,170 )
 
     print 'Read input --> done '
     n_replicates = len(exp_t)
