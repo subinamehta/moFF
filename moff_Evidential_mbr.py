@@ -179,31 +179,37 @@ def mass_assignment(log,x, model, err, weight_flag,intervall,k,r):
         max_set=0
         set_res= ''
         for s in  m_comb.pignistic().keys():
-            if m_comb[s] > max_set:
+            #log.info('Pig.prob %.4f',  m_comb.pignistic()[s])
+            if m_comb.pignistic()[s] > max_set:
+                max_set= m_comb.pignistic()[s]
                 set_res = s
-        log.info( 'choosen interval %s', list(set_res))
+        #log.info( 'choosen interval %s', list(set_res))
+        #log.info( 'max prob %.4f', max_set)
         output =  intervall[1,int(out_map_set[list(set_res)[0]])]
         #output = ( ( intervall[1,int(out_map_set[list(set_res)[0]])] +( r * ( 1 - m_comb.pignistic()[set_res])) )  +  (intervall[1,int(out_map_set[list(set_res)[0]])] - ( r * ( 1 - m_comb.pignistic()[set_res])))  ) / 2
         #print intervall[1,int(out_map_set[list(set_res)[0]])]
         #print r * ( 1 - m_comb.pignistic()[set_res])
+        log.info( 'All intervall  %r',intervall[:,pos_inex_union])
         log.info( 'final value %.4f',output)
     else:
         m_comb= disj_bba_set(bba_input)
         log.info(' Disjuntive combination rule for m_1 and m_2 = %r', m_comb )
         log.info( 'conflict %r' ,  m_comb.local_conflict() )
         log.info( 'pig_trans %r', m_comb.pignistic())
-        max_set=0
-        set_res= ''
+        max_set=  max(m_comb.pignistic().values())
+        set_res= []
         for s in  m_comb.pignistic().keys():
-            if m_comb[s] >= max_set:
-                set_res = s
-        log.info( 'choosen interval %s', list(set_res))
-        output =  intervall[1,int(out_map_set[list(set_res)[0]])]
-
-        #output = (  (intervall[1,int(out_map_set[list(set_res)[0]])] +( r * ( 1 - m_comb.pignistic()[set_res])) )  + (intervall[1,int(out_map_set[list(set_res)[0]])] -( r * ( 1 - m_comb.pignistic()[set_res])) ) ) / 2
+            #log.info('Pig.prob %.4f ,  %r',  m_comb.pignistic()[s],s )
+            if m_comb.pignistic()[s] == max_set:
+                max_set= m_comb.pignistic()[s]
+                set_res.append(s)
+        #set_res.pop(0)
+        #log.info( 'choosen interval %s', list(set_res))
+        #log.info( 'max prob %.4f', max_set)
+        output = intervall[1,int(out_map_set[list(set_res[0])[0]])]
+        #output =  intervall[1,int(out_map_set[list(set_res)[0]])]
+        log.info( 'All intervall  %r',intervall[:,pos_inex_union])
         log.info( 'final value %.4f',output)
-    #m_comb =  bba_input[0] & bba_input[1]
-        #print 'evidential val ' , output, intervall[1,int(out_map_set[list(s)[0]])]
     log.info( '----- ----- -----')
 
 
@@ -430,8 +436,11 @@ def run_mbr(args):
     log_mbr.info('Weighted combination  %s : ', 'Weighted' if int(args.w_comb) == 1 else 'Unweighted')
 
     diff_field = np.setdiff1d(exp_t[0].columns, ['matched', 'peptide', 'mass', 'mz', 'charge', 'prot', 'rt'])
-
+    c_pred = 0
     for jj in aa:
+        c_pred += 1
+        if c_pred == 2:
+            exit()
         pre_pep_save = []
         print 'Predict rt for the exp.  in ', exp_set[jj]
         c_rt = 0
