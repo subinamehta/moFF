@@ -121,7 +121,7 @@ def define_frame(x, model ,intervall):
     return init_union
 
 # combination of rt predicted by each single model
-def mass_assignment(x, model, err, weight_flag,intervall,k,r):
+def mass_assignment(log,x, model, err, weight_flag,intervall,k,r):
     x = x.values
     if x[~ np.isnan(x)].shape[0] == 1:
         # run normal combination.
@@ -129,17 +129,17 @@ def mass_assignment(x, model, err, weight_flag,intervall,k,r):
         return combine_model(x, model, err, weight_flag)
 
     bba_input= []
-    print '------   ------'
-    print 'input values ', x
-    print 'radios in min', r,'# interval', intervall.shape
+    log.info( '-----  ----- ----')
+    log.info('input values : %r', x)
+    log.info( 'radius in min %.4f # interval %r  ', r,intervall.shape)
     pos_inex_union= define_frame(x, model, intervall )
-    print 'frame final ', pos_inex_union
+    log.info( 'frame final %r', pos_inex_union)
     out_map,out_map_set = create_dict_frame(pos_inex_union )
     #//---- end frame computation
     for ii in range(0, len(x)):
         if ~  np.isnan(x[ii]):
             pos= bisect.bisect(intervall[1,:].tolist(),model[ii].predict(x[ii])[0][0]) - 1
-            print 'interval',ii, pos
+            log.info('interval %i %i', ii, pos)
             val = model[ii].predict(x[ii])[0][0]
             pos_index=np.array([pos-1,pos,pos+1])
             ## check that is not out of the limit of interval
@@ -152,7 +152,7 @@ def mass_assignment(x, model, err, weight_flag,intervall,k,r):
             #print  np.exp( - 0.9 *  abs( val - intervall[1,pos-1]  )), np.exp( - 0.9 *  abs( val - intervall[1,pos]  )),np.exp( - 0.9 *  abs( val - intervall[1,pos+1]  ))
 
             #val_v = np.array( [np.exp( - k *  abs( val - intervall[1,pos-1]  )),np.exp( - k *  abs( val - intervall[1,pos]  )),np.exp( - k *  abs( val - intervall[1,pos+1]  ))] )
-            print 'belief ', ii, val_v
+            log.info( 'belief %i %r', ii, val_v)
             m1 = MassFunction()
             final_pos= pos + (np.argsort(val_v)[-2:] -1)  # I take just the best two
             app =   pos_index[np.argsort(val_v)[-1:]].tolist()
@@ -169,39 +169,42 @@ def mass_assignment(x, model, err, weight_flag,intervall,k,r):
             #print 'bba',ii,m1
             bba_input.append(m1)
 
-    print 'combined_masses', bba_input
-    print focal_set_union(bba_input)
+    log.info( 'combined_masses %r', bba_input )
+    #log.info('union_focal element %r',  focal_set_union(bba_input) )
     if focal_set_union(bba_input)  :
         m_comb=  conj_bba_set(bba_input)
-        print('Dempster\'s combination rule for m_1 and m_2 =', m_comb )
-        print 'conflict',  m_comb.local_conflict()
-        print 'pig_trans', m_comb.pignistic()
+        log.info('Dempster combination rule for m_1 and m_2 = %r', m_comb )
+        log.info( 'conflict %r',  m_comb.local_conflict() )
+        log.info('pig_trans %r', m_comb.pignistic())
         max_set=0
         set_res= ''
         for s in  m_comb.pignistic().keys():
             if m_comb[s] > max_set:
                 set_res = s
-        print list(set_res)
-        output = ( ( intervall[1,int(out_map_set[list(set_res)[0]])] +( r * ( 1 - m_comb.pignistic()[set_res])) )  +  (intervall[1,int(out_map_set[list(set_res)[0]])] - ( r * ( 1 - m_comb.pignistic()[set_res])))  ) / 2
-        print intervall[1,int(out_map_set[list(set_res)[0]])]
-        print r * ( 1 - m_comb.pignistic()[set_res])
-        print output
+        log.info( 'choosen interval %s', list(set_res))
+        output =  intervall[1,int(out_map_set[list(set_res)[0]])]
+        #output = ( ( intervall[1,int(out_map_set[list(set_res)[0]])] +( r * ( 1 - m_comb.pignistic()[set_res])) )  +  (intervall[1,int(out_map_set[list(set_res)[0]])] - ( r * ( 1 - m_comb.pignistic()[set_res])))  ) / 2
+        #print intervall[1,int(out_map_set[list(set_res)[0]])]
+        #print r * ( 1 - m_comb.pignistic()[set_res])
+        log.info( 'final value %.4f',output)
     else:
         m_comb= disj_bba_set(bba_input)
-        print(' Disjuntive combination rule for m_1 and m_2 =', m_comb )
-        print 'conflict',  m_comb.local_conflict()
-        print 'pig_trans', m_comb.pignistic()
+        log.info(' Disjuntive combination rule for m_1 and m_2 = %r', m_comb )
+        log.info( 'conflict %r' ,  m_comb.local_conflict() )
+        log.info( 'pig_trans %r', m_comb.pignistic())
         max_set=0
         set_res= ''
         for s in  m_comb.pignistic().keys():
             if m_comb[s] >= max_set:
                 set_res = s
-        print list(set_res)
-        output = (  (intervall[1,int(out_map_set[list(set_res)[0]])] +( r * ( 1 - m_comb.pignistic()[set_res])) )  + (intervall[1,int(out_map_set[list(set_res)[0]])] -( r * ( 1 - m_comb.pignistic()[set_res])) ) ) / 2
-        print output
+        log.info( 'choosen interval %s', list(set_res))
+        output =  intervall[1,int(out_map_set[list(set_res)[0]])]
+
+        #output = (  (intervall[1,int(out_map_set[list(set_res)[0]])] +( r * ( 1 - m_comb.pignistic()[set_res])) )  + (intervall[1,int(out_map_set[list(set_res)[0]])] -( r * ( 1 - m_comb.pignistic()[set_res])) ) ) / 2
+        log.info( 'final value %.4f',output)
     #m_comb =  bba_input[0] & bba_input[1]
         #print 'evidential val ' , output, intervall[1,int(out_map_set[list(s)[0]])]
-    print '--- -----'
+    log.info( '----- ----- -----')
 
 
     # " output basic check control
@@ -244,7 +247,7 @@ def check_columns_name(col_list, col_must_have):
     # succes
     return 0
 
-def	create_belief_RT_interval (max_rt, min_rt,n_interval):
+def	 create_belief_RT_interval (max_rt, min_rt,n_interval):
     # print max_rt, min_rt, float(max_rt-min_rt) / float(20)
 	off_set = float(max_rt-min_rt) / float(n_interval)
 	#print 'length_interval',off_set
@@ -261,6 +264,7 @@ def	create_belief_RT_interval (max_rt, min_rt,n_interval):
 
 ## run the mbr in moFF : input  ms2 identified peptide   output csv file with the matched peptides added
 def run_mbr(args):
+    np.set_printoptions(formatter={'float': '{: 0.4f}'.format})
     if not (os.path.isdir(args.loc_in)):
         exit(str(args.loc_in) + '-->  input folder does not exist ! ')
 
@@ -333,7 +337,7 @@ def run_mbr(args):
         #print data_moff['rt'].min(), data_moff['rt'].max()
 
     # 20 intervalli
-	interval,l_int = create_belief_RT_interval( max_RT,min_RT,170 )
+	interval,l_int = create_belief_RT_interval( max_RT,min_RT,230 )
 
     print 'Read input --> done '
     n_replicates = len(exp_t)
@@ -468,7 +472,7 @@ def run_mbr(args):
         #    axis=1)
 
         test['time_ev'] = test.ix[:, 5: (5 + (n_replicates - 1))].apply(
-            lambda x: mass_assignment(x, model_save[(jj * (n_replicates - 1)):((jj + 1) * (n_replicates - 1))],
+            lambda x: mass_assignment(log_mbr, x, model_save[(jj * (n_replicates - 1)):((jj + 1) * (n_replicates - 1))],
                                     model_err[(jj * (n_replicates - 1)):((jj + 1) * (n_replicates - 1))], args.w_comb,interval, 1,(l_int /2) ) ,axis=1)
         test['time_base'] = test.ix[:, 5: (5 + (n_replicates - 1))].apply(
             lambda x: combine_model(x, model_save[(jj * (n_replicates - 1)):((jj + 1) * (n_replicates - 1))],
