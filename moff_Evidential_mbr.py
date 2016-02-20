@@ -206,7 +206,10 @@ def mass_assignment(log,x, model, err, weight_flag,intervall,k,r):
         #set_res.pop(0)
         #log.info( 'choosen interval %s', list(set_res))
         #log.info( 'max prob %.4f', max_set)
-        output = intervall[1,int(out_map_set[list(set_res[0])[0]])]
+        ss =0
+        for  gg in set_res:
+                ss += intervall[1,int(out_map_set[list(gg)[0]])]
+        output = ss/ len(set_res)
         #output =  intervall[1,int(out_map_set[list(set_res)[0]])]
         log.info( 'All intervall  %r',intervall[:,pos_inex_union])
         log.info( 'final value %.4f',output)
@@ -439,7 +442,7 @@ def run_mbr(args):
     c_pred = 0
     for jj in aa:
         c_pred += 1
-        if c_pred == 2:
+        if c_pred == 4:
             exit()
         pre_pep_save = []
         print 'Predict rt for the exp.  in ', exp_set[jj]
