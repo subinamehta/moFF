@@ -186,10 +186,13 @@ def mass_assignment(log,x, model, err, weight_flag,intervall,k,r):
         # run normal combination.
     ##    # it does not make sense to combine with just one expert
         return combine_model(x, model, err, weight_flag)
-
+    err = np.array(err)
     bba_input= []
     log.info( '-----  ----- ----')
     log.info('input values : %r', x)
+    log.info('error_model : %r ', np.array(err) )
+    norm_err =  ( np.array(err)[np.where(~np.isnan(x))]  )  /(np.sum(np.array(err)[np.where(~np.isnan(x))]))
+    log.info('norm_error : %r ', np.array(norm_err) )
     log.info( 'radius in min %.4f # interval %r  ', r,intervall.shape)
     pos_inex_union= define_frame(x, model, intervall )
     log.info( 'frame final %r', pos_inex_union)
@@ -215,10 +218,15 @@ def mass_assignment(log,x, model, err, weight_flag,intervall,k,r):
             m1 = MassFunction()
             final_pos= pos + (np.argsort(val_v)[-2:] -1)  # I take just the best two
             app =   pos_index[np.argsort(val_v)[-1:]].tolist()
-            m1[out_map[app[0]] ]= np.exp( - k *  abs( val - intervall[1, final_pos[1]]  ))
+            # discount version
+            m1[out_map[app[0]] ]=  (1- err[ii]  ) * ( np.exp( - k *  abs( val - intervall[1, final_pos[1]]  )))
+            # not dispcount
+            #m1[out_map[app[0]] ]= np.exp( - k *  abs( val - intervall[1, final_pos[1]]  ))
             app = pos_index[np.argsort(val_v)[-2:]]
             if    out_map.has_key( ''.join((str(app.tolist()))) ) :
-                m1[  out_map[  ''.join((str(app.tolist())))  ]]= 1- np.exp( - k *  abs( val - intervall[1, final_pos[1]]  ))
+                m1[  out_map[  ''.join((str(app.tolist())))  ]]=  ( (1- err[ii] ) *  (1- np.exp( - k *  abs( val - intervall[1, final_pos[1]]  )) ) )   + err[ii]
+                ## not discountet
+                #m1[  out_map[  ''.join((str(app.tolist())))  ]]= 1- np.exp( - k *  abs( val - intervall[1, final_pos[1]]  ))
             else:
                 # swap
                 app[0], app[1] = app[1], app[0]
@@ -379,7 +387,7 @@ def run_mbr(args):
         #print data_moff['rt'].min(), data_moff['rt'].max()
 
     # 20 intervalli
-	interval,l_int = create_belief_RT_interval( max_RT,min_RT,230 )
+	interval,l_int = create_belief_RT_interval( max_RT,min_RT,280 )
 
     print 'Read input --> done '
     n_replicates = len(exp_t)
@@ -472,11 +480,11 @@ def run_mbr(args):
     log_mbr.info('Weighted combination  %s : ', 'Weighted' if int(args.w_comb) == 1 else 'Unweighted')
 
     diff_field = np.setdiff1d(exp_t[0].columns, ['matched', 'peptide', 'mass', 'mz', 'charge', 'prot', 'rt'])
-    #c_pred = 0
+    c_pred = 0
     for jj in aa:
-        #c_pred += 1
-        #if c_pred == 4:
-        #    exit()
+        c_pred += 1
+        if c_pred == 4:
+            exit()
         pre_pep_save = []
         print 'Predict rt for the exp.  in ', exp_set[jj]
         c_rt = 0
@@ -540,7 +548,7 @@ def run_mbr(args):
         ## print the entire file
         test.to_csv(path_or_buf= output_dir + '/' + str(os.path.split(exp_set[jj])[1].split('.')[0]) + '_match.txt',sep='\t',index=False)
         log_mbr.info('Before adding %s contains %i ', exp_set[jj], exp_t[jj].shape[0])
-        exp_out[jj] = pd.concat([exp_t[jj], test], join='outer', axis=0)
+        #exp_out[jj] = pd.concat([exp_t[jj], test], join='outer', axis=0)
         log_mbr.info('After MBR %s contains:  %i  peptides', exp_set[jj], exp_out[jj].shape[0])
         log_mbr.info('----------------------------------------------')
         print 'matched 1', exp_out[jj][exp_out[jj]['matched'] == 1].shape, exp_out[jj][
