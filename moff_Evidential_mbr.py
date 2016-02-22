@@ -65,11 +65,23 @@ def create_dict_frame(pos_index):
     return map_inter,map_set2_inter
 
 ## methods for n expert in input
+## Union of the focal set
 def focal_set_union (bba_set):
     app=  bba_set[0].core()
     for ii in range(1,len(bba_set)):
             app = app.intersection(bba_set[ii].core())
     return app
+
+## methods for find a subsett of element in  the same set
+def focal_set_get_union (bba_set):
+    app=  bba_set[0].core()
+    index_exp= [0]
+    for ii in range(1,len(bba_set)):
+            if   ( app.intersection(bba_set[ii].core()) )  :
+                app = app.intersection(bba_set[ii].core())
+                index_exp.append(ii)
+
+    return app, index_exp
 
 
 def conj_bba_set(bba_set):
@@ -119,6 +131,53 @@ def define_frame(x, model ,intervall):
             init_union = np.union1d(pos_app,init_union  )
          #print 'frame', ii, pos_app
     return init_union
+
+
+def conj_combination (bba, log, intervall, out_map_set,pos_inex_union):
+    m_comb=  conj_bba_set(bba)
+    log.info('Dempster combination rule for m_1 and m_2 = %r', m_comb )
+    log.info( 'conflict %r',  m_comb.local_conflict() )
+    log.info('pig_trans %r', m_comb.pignistic())
+    max_set=0
+    set_res= ''
+    for s in  m_comb.pignistic().keys():
+        #log.info('Pig.prob %.4f',  m_comb.pignistic()[s])
+        if m_comb.pignistic()[s] > max_set:
+            max_set= m_comb.pignistic()[s]
+            set_res = s
+    #log.info( 'choosen interval %s', list(set_res))
+    #log.info( 'max prob %.4f', max_set)
+    output =  intervall[1,int(out_map_set[list(set_res)[0]])]
+    #print intervall[1,int(out_map_set[list(set_res)[0]])]
+    #print r * ( 1 - m_comb.pignistic()[set_res])
+    log.info( 'All intervall  %r',intervall[:,pos_inex_union])
+    log.info( 'final value %.4f',output)
+    return output
+
+
+def disj_combination (bba, log, intervall, out_map_set,pos_inex_union):
+    m_comb= disj_bba_set(bba)
+    log.info(' Disjuntive combination rule for m_1 and m_2 = %r', m_comb )
+    log.info( 'conflict %r' ,  m_comb.local_conflict() )
+    log.info( 'pig_trans %r', m_comb.pignistic())
+    max_set=  max(m_comb.pignistic().values())
+    set_res= []
+    for s in  m_comb.pignistic().keys():
+        #log.info('Pig.prob %.4f ,  %r',  m_comb.pignistic()[s],s )
+        if m_comb.pignistic()[s] == max_set:
+            max_set= m_comb.pignistic()[s]
+            set_res.append(s)
+    #log.info( 'choosen interval %s', list(set_res))
+    #log.info( 'max prob %.4f', max_set)
+    ss =0
+    for  gg in set_res:
+            ss += intervall[1,int(out_map_set[list(gg)[0]])]
+    output = ss/ len(set_res)
+    #output =  intervall[1,int(out_map_set[list(set_res)[0]])]
+    log.info( 'All intervall  %r',intervall[:,pos_inex_union])
+    log.info( 'final value %.4f',output)
+    return output
+
 
 # combination of rt predicted by each single model
 def mass_assignment(log,x, model, err, weight_flag,intervall,k,r):
@@ -170,49 +229,23 @@ def mass_assignment(log,x, model, err, weight_flag,intervall,k,r):
             bba_input.append(m1)
 
     log.info( 'combined_masses %r', bba_input )
+
     #log.info('union_focal element %r',  focal_set_union(bba_input) )
     if focal_set_union(bba_input)  :
-        m_comb=  conj_bba_set(bba_input)
-        log.info('Dempster combination rule for m_1 and m_2 = %r', m_comb )
-        log.info( 'conflict %r',  m_comb.local_conflict() )
-        log.info('pig_trans %r', m_comb.pignistic())
-        max_set=0
-        set_res= ''
-        for s in  m_comb.pignistic().keys():
-            #log.info('Pig.prob %.4f',  m_comb.pignistic()[s])
-            if m_comb.pignistic()[s] > max_set:
-                max_set= m_comb.pignistic()[s]
-                set_res = s
-        #log.info( 'choosen interval %s', list(set_res))
-        #log.info( 'max prob %.4f', max_set)
-        output =  intervall[1,int(out_map_set[list(set_res)[0]])]
-        #output = ( ( intervall[1,int(out_map_set[list(set_res)[0]])] +( r * ( 1 - m_comb.pignistic()[set_res])) )  +  (intervall[1,int(out_map_set[list(set_res)[0]])] - ( r * ( 1 - m_comb.pignistic()[set_res])))  ) / 2
-        #print intervall[1,int(out_map_set[list(set_res)[0]])]
-        #print r * ( 1 - m_comb.pignistic()[set_res])
-        log.info( 'All intervall  %r',intervall[:,pos_inex_union])
-        log.info( 'final value %.4f',output)
+        output = conj_combination (bba_input,log, intervall, out_map_set,pos_inex_union )
     else:
-        m_comb= disj_bba_set(bba_input)
-        log.info(' Disjuntive combination rule for m_1 and m_2 = %r', m_comb )
-        log.info( 'conflict %r' ,  m_comb.local_conflict() )
-        log.info( 'pig_trans %r', m_comb.pignistic())
-        max_set=  max(m_comb.pignistic().values())
-        set_res= []
-        for s in  m_comb.pignistic().keys():
-            #log.info('Pig.prob %.4f ,  %r',  m_comb.pignistic()[s],s )
-            if m_comb.pignistic()[s] == max_set:
-                max_set= m_comb.pignistic()[s]
-                set_res.append(s)
-        #set_res.pop(0)
-        #log.info( 'choosen interval %s', list(set_res))
-        #log.info( 'max prob %.4f', max_set)
-        ss =0
-        for  gg in set_res:
-                ss += intervall[1,int(out_map_set[list(gg)[0]])]
-        output = ss/ len(set_res)
-        #output =  intervall[1,int(out_map_set[list(set_res)[0]])]
-        log.info( 'All intervall  %r',intervall[:,pos_inex_union])
-        log.info( 'final value %.4f',output)
+        app,ii_index  = focal_set_get_union(bba_input)
+        if len(ii_index) >= 2:
+             # uso la ConJ rule if two or more have  same common intervall
+             log.info( 'Subset of %i expert combined with Conj Rule', len(ii_index) )
+             bba_input = [bba_input[i] for i in ii_index]
+             output = conj_combination (bba_input,log, intervall, out_map_set,pos_inex_union )
+        else:
+            output = disj_combination (bba_input, log, intervall, out_map_set,pos_inex_union)
+
+
+
+
     log.info( '----- ----- -----')
 
 
@@ -439,11 +472,11 @@ def run_mbr(args):
     log_mbr.info('Weighted combination  %s : ', 'Weighted' if int(args.w_comb) == 1 else 'Unweighted')
 
     diff_field = np.setdiff1d(exp_t[0].columns, ['matched', 'peptide', 'mass', 'mz', 'charge', 'prot', 'rt'])
-    c_pred = 0
+    #c_pred = 0
     for jj in aa:
-        c_pred += 1
-        if c_pred == 4:
-            exit()
+        #c_pred += 1
+        #if c_pred == 4:
+        #    exit()
         pre_pep_save = []
         print 'Predict rt for the exp.  in ', exp_set[jj]
         c_rt = 0
