@@ -326,7 +326,7 @@ def run_mbr(args):
         if '\\' in str(args.loc_in):
             output_dir = str(args.loc_in) + '\\mbr_output'
         else:
-            exit(str(args.loc_in) + ' EXIT input foldet path not well specified --> / missing ')
+            exit(str(args.loc_in) + ' EXIT input folder path not well specified --> / missing ')
 
     if not (os.path.isdir(output_dir)):
         print "Created MBR output folder in ", output_dir
@@ -373,6 +373,7 @@ def run_mbr(args):
         if check_columns_name(list_name, ast.literal_eval(config.get('moFF', 'col_must_have_x'))) == 1:
             exit('ERROR minimal field requested are missing or wrong')
         data_moff['matched'] = 0
+        ## pay attantion on this conversion
         data_moff['mass'] = data_moff['mass'].map('{:.4f}'.format)
 
         data_moff['code_unique'] = data_moff['peptide'].astype(str) + '_' + data_moff['mass'].astype(str)
@@ -387,7 +388,7 @@ def run_mbr(args):
         #print data_moff['rt'].min(), data_moff['rt'].max()
 
     # 20 intervalli
-	interval,l_int = create_belief_RT_interval( max_RT,min_RT,280 )
+	interval,l_int = create_belief_RT_interval( max_RT,min_RT, 280 )
 
     print 'Read input --> done '
     n_replicates = len(exp_t)
@@ -415,7 +416,7 @@ def run_mbr(args):
     w_mbr.setLevel(logging.INFO)
     log_mbr.addHandler(w_mbr)
 
-    log_mbr.info('Filtering is %s : ', 'active' if args.out_flag == 1 else 'not atcive')
+    log_mbr.info('Filtering is %s : ', 'active' if args.out_flag == 1 else 'not actcive')
     log_mbr.info('Number of replicates %i,', n_replicates)
     log_mbr.info('Pairwise model computation ----')
 
@@ -483,7 +484,7 @@ def run_mbr(args):
     c_pred = 0
     for jj in aa:
         c_pred += 1
-        if c_pred == 4:
+        if c_pred == 2:
             exit()
         pre_pep_save = []
         print 'Predict rt for the exp.  in ', exp_set[jj]
@@ -496,8 +497,13 @@ def run_mbr(args):
                 set_dif_s_in_1 = np.setdiff1d(list_pep_repB, list_pep_repA)
                 add_pep_frame = exp_t[i[1]][exp_t[i[1]]['peptide'].isin(set_dif_s_in_1)].copy()
                 add_pep_frame = add_pep_frame[['peptide', 'mass', 'mz', 'charge', 'prot', 'rt']]
-                add_pep_frame['code_unique'] = add_pep_frame['peptide'] + '_' + add_pep_frame['prot'] + '_' + \
-                                               add_pep_frame['mass'].astype(str) + '_' + add_pep_frame['charge'].astype(
+                add_pep_frame['charge']=add_pep_frame['charge'].astype(int)
+
+                #add_pep_frame['code_unique'] = add_pep_frame['peptide'] + '_' + add_pep_frame['prot'] + '_' + \
+                #                               add_pep_frame['mass'].astype(str) + '_' + add_pep_frame['charge'].astype(
+                #    str)
+                ## withput ptotein in the key
+                add_pep_frame['code_unique'] = add_pep_frame['peptide'] + '_' + add_pep_frame['mass'].astype(str) + '_' + add_pep_frame['charge'].astype(
                     str)
                 add_pep_frame = add_pep_frame.groupby('code_unique', as_index=False)[
                     'peptide', 'mass', 'charge', 'mz', 'prot', 'rt'].aggregate(max)
@@ -506,6 +512,7 @@ def run_mbr(args):
                 list_name = [w.replace('rt', 'rt_' + str(c_rt)) for w in list_name]
                 add_pep_frame.columns = list_name
                 pre_pep_save.append(add_pep_frame)
+
                 c_rt += 1
         # print 'input columns',pre_pep_save[0].columns
 
