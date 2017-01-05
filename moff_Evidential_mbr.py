@@ -203,6 +203,8 @@ def mass_assignment(log,x, model, err, weight_flag,intervall,k,r):
             pos= bisect.bisect(intervall[1,:].tolist(),model[ii].predict(x[ii])[0][0]) - 1
             log.info('interval %i %i', ii, pos)
             val = model[ii].predict(x[ii])[0][0]
+
+
             pos_index=np.array([pos-1,pos,pos+1])
             ## check that is not out of the limit of interval
             pos_index= pos_index[pos_index < intervall.shape[1]]
@@ -210,6 +212,7 @@ def mass_assignment(log,x, model, err, weight_flag,intervall,k,r):
             for aa in pos_index:
                     app_val.append(np.exp( - k *  abs( val - intervall[1,aa])) )
             val_v= np.array(app_val)
+
 
             #print  np.exp( - 0.9 *  abs( val - intervall[1,pos-1]  )), np.exp( - 0.9 *  abs( val - intervall[1,pos]  )),np.exp( - 0.9 *  abs( val - intervall[1,pos+1]  ))
 
@@ -219,14 +222,14 @@ def mass_assignment(log,x, model, err, weight_flag,intervall,k,r):
             final_pos= pos + (np.argsort(val_v)[-2:] -1)  # I take just the best two
             app =   pos_index[np.argsort(val_v)[-1:]].tolist()
             # discount version
-            m1[out_map[app[0]] ]=  (1- err[ii]  ) * ( np.exp( - k *  abs( val - intervall[1, final_pos[1]]  )))
+            #m1[out_map[app[0]] ]=  (1- err[ii]  ) * ( np.exp( - k *  abs( val - intervall[1, final_pos[1]]  )))
             # not dispcount
-            #m1[out_map[app[0]] ]= np.exp( - k *  abs( val - intervall[1, final_pos[1]]  ))
+            m1[out_map[app[0]] ]= np.exp( - k *  abs( val - intervall[1, final_pos[1]]  ))
             app = pos_index[np.argsort(val_v)[-2:]]
             if    out_map.has_key( ''.join((str(app.tolist()))) ) :
-                m1[  out_map[  ''.join((str(app.tolist())))  ]]=  ( (1- err[ii] ) *  (1- np.exp( - k *  abs( val - intervall[1, final_pos[1]]  )) ) )   + err[ii]
+                #m1[  out_map[  ''.join((str(app.tolist())))  ]]=  ( (1- err[ii] ) *  (1- np.exp( - k *  abs( val - intervall[1, final_pos[1]]  )) ) )   + err[ii]
                 ## not discountet
-                #m1[  out_map[  ''.join((str(app.tolist())))  ]]= 1- np.exp( - k *  abs( val - intervall[1, final_pos[1]]  ))
+                m1[  out_map[  ''.join((str(app.tolist())))  ]]= 1- np.exp( - k *  abs( val - intervall[1, final_pos[1]]  ))
             else:
                 # swap
                 app[0], app[1] = app[1], app[0]
@@ -388,7 +391,7 @@ def run_mbr(args):
         #print data_moff['rt'].min(), data_moff['rt'].max()
 
     # 20 intervalli
-	interval,l_int = create_belief_RT_interval( max_RT,min_RT, 280 )
+	interval,l_int = create_belief_RT_interval( max_RT,min_RT, 180 )
 
     print 'Read input --> done '
     n_replicates = len(exp_t)
@@ -499,11 +502,11 @@ def run_mbr(args):
                 add_pep_frame = add_pep_frame[['peptide', 'mass', 'mz', 'charge', 'prot', 'rt']]
                 add_pep_frame['charge']=add_pep_frame['charge'].astype(int)
 
-                #add_pep_frame['code_unique'] = add_pep_frame['peptide'] + '_' + add_pep_frame['prot'] + '_' + \
-                #                               add_pep_frame['mass'].astype(str) + '_' + add_pep_frame['charge'].astype(
+                add_pep_frame['code_unique'] = add_pep_frame['peptide'] + '_' + add_pep_frame['prot'] + '_' + \
+                                               add_pep_frame['mass'].astype(str) + '_' + add_pep_frame['charge'].astype(
                 #    str)
                 ## withput ptotein in the key
-                add_pep_frame['code_unique'] = add_pep_frame['peptide'] + '_' + add_pep_frame['mass'].astype(str) + '_' + add_pep_frame['charge'].astype(
+                #add_pep_frame['code_unique'] = add_pep_frame['peptide'] + '_' + add_pep_frame['mass'].astype(str) + '_' + add_pep_frame['charge'].astype(
                     str)
                 add_pep_frame = add_pep_frame.groupby('code_unique', as_index=False)[
                     'peptide', 'mass', 'charge', 'mz', 'prot', 'rt'].aggregate(max)
