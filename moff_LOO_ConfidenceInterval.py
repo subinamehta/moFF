@@ -1,28 +1,27 @@
-import logging
-import itertools
-import os
-import argparse
-import re
 import ConfigParser
+import argparse
 import ast
-import copy
 import bisect
-from itertools import chain, combinations
+import copy
+import itertools
+import logging
+import os
 import random
+import re
+from itertools import chain, combinations
 
-import pandas as pd
-import numpy as np
-from sklearn import linear_model
-from sklearn.metrics import mean_absolute_error
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
 import GPy
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+from sklearn import linear_model
+from sklearn.cluster import KMeans
+from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import silhouette_score
+from statsmodels.sandbox.regression.predstd import wls_prediction_std
 
 from pyds import MassFunction
 
-##
-import statsmodels.api as sm
-from statsmodels.sandbox.regression.predstd import wls_prediction_std
 
 ## filtering _outlier
 def MahalanobisDist(x, y):
@@ -146,6 +145,48 @@ def define_frame(x, model ,intervall,delta):
             init_union = np.union1d(pos_app,init_union  )
          #print 'frame', ii, pos_app
     return init_union
+
+
+def define_frame_GP(x, model, intervall, delta):
+    # //----   union of the set
+
+    if x[np.isnan(x)].shape[0] == 0:
+        # init  no one nan values
+        pos = bisect.bisect(intervall[1, :].tolist(), model[0].predict(x[0].reshape(1,1))[0]) - 1
+        if pos < delta:
+            init_union = np.arange(pos - pos, pos + pos)
+        else:
+            init_union = np.arange(pos - delta, pos + delta)
+
+        offset = 1
+    else:
+        if np.isnan(x[0]):
+            first_index = np.where(~np.isnan(x))[0][0]
+            ## caso fisrt element is nana
+            pos = bisect.bisect(intervall[1, :].tolist(), model[first_index].predict(x[first_index].reshape(1,1))[0]) - 1
+            init_union = np.arange(pos - delta, pos + delta)
+            offset = np.where(~np.isnan(x))[0][1]
+        else:
+            ## caso first element !=0
+            pos = bisect.bisect(intervall[1, :].tolist(), model[0].predict(x[0].reshape(1,1))[0]) - 1
+
+            init_union = np.arange(pos - delta, pos + delta)
+            offset = np.where(~np.isnan(x))[0][1]
+    for ii in range(offset, len(x)):
+        if ~  np.isnan(x[ii]):
+            pos = bisect.bisect(intervall[1, :].tolist(), model[ii].predict(x[ii].reshape(1,1))[0]) - 1
+            if pos < delta:
+                pos_app = np.arange(pos - pos, pos + pos)
+            else:
+
+                pos_app = np.arange(pos - delta, pos + delta)
+            # check if pos could flow out of mmax number of interval
+            pos_app = pos_app[pos_app < intervall.shape[1]]
+            init_union = np.union1d(pos_app, init_union)
+            # print 'frame', ii, pos_app
+    return init_union
+
+
 
 
 def conj_combination (bba, log, intervall,pos_inex_union,radius):
@@ -280,7 +321,85 @@ def mass_assignment_kmeans(log,x, model, err, weight_flag,intervall,k,r):
         # output not weight
         return -1
 
+def combine_model_GP_consonant_bf(x, model, err, weight_flag, log,intervall,k,r):
+        bba_input = []
+        debug__mode= True
 
+        print ('radius in min %.4f # interval %r  ', r, intervall.shape)
+        pos_inex_union = define_frame_GP(x, model, intervall, 7)
+        #print pos_inex_union
+        print('frame final %r %r', pos_inex_union, pos_inex_union.shape)
+        for ii in range(0, len(x)):
+            if ~  np.isnan(x[ii]):
+                pred, var = model[ii].predict(x[ii].reshape(1, 1))
+                print pred - np.sqrt(var)[0]
+                # print ' %i Input Rt  %4.4f  Predicted: %4.4f Var %4.4f Interval at 95 %4.4 %4.4f ' % (ii, x[ii] ,float(pred), float(var), float(pred - (2 * np.sqrt(var))) ,float(pred + (2 * np.sqrt(var))) )
+                print ' %i Input Rt  %4.4f  Predicted: %4.4f Var %4.4f  Interval at 95 %4.4f <--> %4.4f  ' % (
+                ii, x[ii], float(pred), float(var), float(pred - (2 * np.sqrt(var))), float(pred + (2 * np.sqrt(var))))
+                iv_l=float(pred - (2 * np.sqrt(var)))
+                iv_u=float(pred + (2 * np.sqrt(var)))
+                print 'Error mean.abs %4.4f' % float(err[ii])
+                pos = bisect.bisect(intervall[1, :].tolist(), pred)
+                pos_l = bisect.bisect(intervall[1, :].tolist(),iv_l )
+                pos_u = bisect.bisect(intervall[1, :].tolist(), iv_u)
+                print('interval %i  #index highest %i', ii, pos)
+                val = pred
+                pos_index = np.arange(pos_l, pos_u+1)
+                dist_min = 0
+                if debug__mode:
+                    all_dist = []
+                    for aa in pos_inex_union:
+                        cur_val = np.exp(- k * abs(pred - intervall[1, aa]))
+                        # cur_val =  abs( val - intervall[1,aa])
+
+                        if cur_val > dist_min:
+                            dist_min = cur_val
+                            pos = aa
+
+                        all_dist.append(cur_val)
+                    #log.info('Distance for all')
+                    # all_dist= all_dist/ sum(all_dist)
+                    #print (' %r', all_dist)
+                dist_norm = pd.Series(all_dist, index=pos_inex_union)
+                #print dist_norm
+                ## assignment
+                m1 = MassFunction()
+
+                m1[[str(dist_norm.argmax())]] =   dist_norm.max()
+                left_belief = 1 -  dist_norm.max()
+
+                m1[[str(a) for a in pos_index.tolist()]] = left_belief
+                print m1
+                print ('---    ----')
+
+                bba_input.append(m1)
+
+        for jj in range(len(bba_input)):
+            log.info('Exp %i : %r', jj, bba_input[jj])
+
+            # log.info('union_focal element %r',  focal_set_union(bba_input) )
+            if focal_set_union(bba_input):
+                output = conj_combination(bba_input, log, intervall, pos_inex_union, r)
+            else:
+                app, ii_index = focal_set_get_union(bba_input)
+                # print ii_index
+                if len(ii_index) >= 2:
+                    # uso la ConJ rule if two or more have  same common intervall
+                    log.info('Subset of expert combined with Conj Rule %r', ii_index)
+                    bba_input = [bba_input[i] for i in ii_index]
+                    output = conj_combination(bba_input, log, intervall, pos_inex_union, r)
+                    # else:
+                    #   output = disj_combination (bba_input, log, intervall, out_map_set,pos_inex_union)
+
+            log.info('----- ----- -----')
+
+            print output
+            # " output basic check control
+        if output > 0:
+            return output
+        else:
+            # output not weight
+            return -1
 
 
 # combination of RT for
@@ -409,6 +528,10 @@ def mass_assignment_consonat_bf(log,x, model, err, weight_flag,intervall,k,r):
         # output not weight
         return -1
 
+
+
+
+
 def combine_model_GP(x, model, err, weight_flag,log):
     # x = x.values
     #tot_err =  1- ( (np.array(err)[np.where(~np.isnan(x))]) / np.max(np.array(err)[np.where(~np.isnan(x))]))
@@ -419,7 +542,10 @@ def combine_model_GP(x, model, err, weight_flag,log):
     app_sum_2 = 0
     for ii in range(0, len(x)):
         pred , var= model[ii].predict(x[ii].reshape(1,1))
-        log.info(' %i Input Rt  %r  Predicted: %r ',ii,x[ii] , pred)
+        print pred - np.sqrt(var)[0]
+        #print ' %i Input Rt  %4.4f  Predicted: %4.4f Var %4.4f Interval at 95 %4.4 %4.4f ' % (ii, x[ii] ,float(pred), float(var), float(pred - (2 * np.sqrt(var))) ,float(pred + (2 * np.sqrt(var))) )
+        print ' %i Input Rt  %4.4f  Predicted: %4.4f Var %4.4f  Interval at 95 %4.4f <--> %4.4f  ' % (ii,x[ii],float(pred), float(var), float(pred - (2 * np.sqrt(var))) ,float(pred + (2 * np.sqrt(var))) )
+        print 'Error mean.abs %4.4f' % float(err[ii])
         if ~  np.isnan(x[ii]):
             if int(weight_flag) == 0:
 
@@ -665,9 +791,11 @@ def run_mbr(args):
         # sort in pandas 1.7.1
         data_moff = data_moff.sort(columns='rt')
         if nn ==0:
-            intersect_share =  data_moff[data_moff['prot']=='16128008']['code_share'].unique()
+            #intersect_share =  data_moff[(data_moff['prot']=='16128008') | ( data_moff['prot']=='170082857' ) ]['code_share'].unique()
+            intersect_share =  data_moff[(data_moff['prot']=='16128008')  ]['code_share'].unique()
         else:
-            intersect_share = np.intersect1d( data_moff[data_moff['prot']=='16128008']['code_share'],intersect_share)
+            #intersect_share = np.intersect1d( data_moff[(data_moff['prot']=='16128008') | ( data_moff['prot']=='170082857' )]['code_share'],intersect_share)
+            intersect_share = np.intersect1d( data_moff[(data_moff['prot']=='16128008')]['code_share'],intersect_share)
         exp_t.append(data_moff)
         exp_out.append(data_moff)
         # Discretization of the RT space: get the max and the min valued
@@ -679,8 +807,9 @@ def run_mbr(args):
 
 
     print intersect_share.shape
-    print intersect_share
+    #print intersect_share
     # most abundant protein :-> 16128008
+    # other one : gi|170082857, gi|170083440, gi|16131810
     ##----------- for checking how the pep in the spec. proteins look likes / haow many
     #for kk in range(1):
     #    #print kk, exp_t[kk][ ( exp_t[kk]['prot']=='16128008' )&  (exp_t[kk]['code_unique'].isin(intersect_share[0:1]) )].shape
@@ -713,18 +842,18 @@ def run_mbr(args):
     #print 'MATCHING between RUN for  ', exp_set[fix_rep]
     ## list_inter: contains the  size of the interval
     ## pep_out : feature leaved out
-    for fix_rep in [0,1,2,3,4,5,6,7,8,9,10]:
+    for fix_rep in [9]:
         out_df =pd.DataFrame(columns=['prot', 'peptide', 'charge', 'mz', 'rt_0', 'rt_1', 'rt_2',
        'rt_3', 'rt_4', 'rt_5', 'rt_6', 'rt_7', 'rt_8', 'rt_9',
        'time_base', 'matched', 'rt'])
         print 'MATCHING between RUN for  ', exp_set[fix_rep]
     # workarouand
     #for list_inter in [250]:
-        for pep_out in intersect_share   :
+        for pep_out in intersect_share[0:1] :
             ## binning  of the RT space in
             list_inter = 250
-            #interval,l_int = create_belief_RT_interval( max_RT,min_RT, list_inter )
-            #print 'radius', (l_int /2), '#interval', list_inter
+            interval,l_int = create_belief_RT_interval( max_RT,min_RT, list_inter )
+            print 'radius', (l_int /2), '#interval', list_inter
             ## fix_rep input della procedura
             exp_t[fix_rep ]= c_data[fix_rep]
             #exp_t= c_data
@@ -813,7 +942,7 @@ def run_mbr(args):
 
 
                             # version with linear regression
-                            #model , predicted_train=  train_models_2_linear(data_A,data_B)
+                            #model , predicted_train = train_models_2_linear(data_A,data_B)
 
                             # GP process test
                             #print 'GP test'
@@ -834,7 +963,7 @@ def run_mbr(args):
                             model_status.append(1)
             if np.where(np.array(model_status) == -1)[0].shape[0] >= (len(aa) / 2):
                 log_mbr.warning('MBR aborted :  mbr cannot be run, not enough shared peptide among the replicates ')
-                exit('ERROR : mbr cannnot be run, not enough shared pepetide among the replicates')
+                exit('ERROR : mbr cannot be run, not enough shared pepetide among the replicates')
             log_mbr.info('Combination of the  model  --------')
             log_mbr.info('Weighted combination  %s : ', 'Weighted' if int(args.w_comb) == 1 else 'Unweighted')
             diff_field = np.setdiff1d(exp_t[0].columns, ['matched', 'peptide', 'mass', 'mz', 'charge', 'prot', 'rt'])
@@ -900,8 +1029,10 @@ def run_mbr(args):
             #    lambda x: combine_model(x, model_save,model_err, args.w_comb ,log_mbr) ,axis=1)
 
             # GP computation
-            test['time_base'] = test.ix[:, 5: (5 + (n_replicates - 1))].apply(
-                lambda x: combine_model_GP(x, model_save,model_err, args.w_comb ,log_mbr) ,axis=1)
+            #test['time_base'] = test.ix[:, 5: (5 + (n_replicates - 1))].apply(
+            #   lambda x: combine_model_GP(x, model_save,model_err, args.w_comb ,log_mbr) ,axis=1)
+            test['time_ev'] = test.ix[:, 5: (5 + (n_replicates - 1))].apply(lambda x:combine_model_GP_consonant_bf(x, model_save, model_err, args.w_comb, log_mbr, interval, 0.5,(l_int /2)) ,axis=1)
+
 
             test['matched'] = 1
             #test['interval_number']= list_inter
