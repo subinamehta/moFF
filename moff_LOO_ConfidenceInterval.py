@@ -325,44 +325,54 @@ def combine_model_GP_consonant_bf(x, model, err, weight_flag, log,intervall,k,r)
         bba_input = []
         debug__mode= True
 
-        print ('radius in min %.4f # interval %r  ', r, intervall.shape)
-        pos_inex_union = define_frame_GP(x, model, intervall, 7)
+        log.info ('radius in min %.4f # interval %r  ', r, intervall.shape)
+        pos_inex_union = define_frame_GP(x, model, intervall, 9)
         #print pos_inex_union
-        print('frame final %r %r', pos_inex_union, pos_inex_union.shape)
+        log.info('frame final Theta %r %r', pos_inex_union, pos_inex_union.shape)
         for ii in range(0, len(x)):
             if ~  np.isnan(x[ii]):
                 pred, var = model[ii].predict(x[ii].reshape(1, 1))
                 print pred - np.sqrt(var)[0]
                 # print ' %i Input Rt  %4.4f  Predicted: %4.4f Var %4.4f Interval at 95 %4.4 %4.4f ' % (ii, x[ii] ,float(pred), float(var), float(pred - (2 * np.sqrt(var))) ,float(pred + (2 * np.sqrt(var))) )
-                print ' %i Input Rt  %4.4f  Predicted: %4.4f Var %4.4f  Interval at 95 %4.4f <--> %4.4f  ' % (
-                ii, x[ii], float(pred), float(var), float(pred - (2 * np.sqrt(var))), float(pred + (2 * np.sqrt(var))))
+                log.info( ' %i Input Rt  %4.4f  Predicted: %4.4f Var %4.4f  Interval at 95 %4.4f <--> %4.4f  ' % (
+                ii, x[ii], float(pred), float(var), float(pred - (2 * np.sqrt(var))), float(pred + (2 * np.sqrt(var)))) )
                 iv_l=float(pred - (2 * np.sqrt(var)))
                 iv_u=float(pred + (2 * np.sqrt(var)))
-                print 'Error mean.abs %4.4f' % float(err[ii])
+                log.info( 'Error mean.abs %4.4f' % float(err[ii]))
                 pos = bisect.bisect(intervall[1, :].tolist(), pred)
                 pos_l = bisect.bisect(intervall[1, :].tolist(),iv_l )
                 pos_u = bisect.bisect(intervall[1, :].tolist(), iv_u)
-                print('interval %i  #index highest %i', ii, pos)
+                log.info('interval %i  #index highest %i', ii, pos)
                 val = pred
                 pos_index = np.arange(pos_l, pos_u+1)
+                log.info('interval %i  %r', ii, pos_index)
                 dist_min = 0
                 if debug__mode:
                     all_dist = []
                     for aa in pos_inex_union:
                         cur_val = np.exp(- k * abs(pred - intervall[1, aa]))
-                        # cur_val =  abs( val - intervall[1,aa])
+                        log.info('#interval %r %4.4f ' , aa,float(cur_val[0]))
 
+                        # cur_val =  abs( val - intervall[1,aa])
                         if cur_val > dist_min:
                             dist_min = cur_val
                             pos = aa
 
-                        all_dist.append(cur_val)
-                    #log.info('Distance for all')
-                    # all_dist= all_dist/ sum(all_dist)
-                    #print (' %r', all_dist)
+                        all_dist.append(cur_val[0])
+
                 dist_norm = pd.Series(all_dist, index=pos_inex_union)
+
+                # normalization
+                dist_norm= dist_norm[:]/ dist_norm.sum()
                 #print dist_norm
                 ## assignment
+
+                print dist_norm[pos_index]
+                print dist_norm[pos_index].sum()
+                print  dist_norm.max(),dist_norm.argmax()
+
+                ''''''
+                # assigment 1
                 m1 = MassFunction()
 
                 m1[[str(dist_norm.argmax())]] =   dist_norm.max()
@@ -371,29 +381,30 @@ def combine_model_GP_consonant_bf(x, model, err, weight_flag, log,intervall,k,r)
                 m1[[str(a) for a in pos_index.tolist()]] = left_belief
                 print m1
                 print ('---    ----')
-
+                ''''''
                 bba_input.append(m1)
 
+        print len(bba_input)
         for jj in range(len(bba_input)):
             log.info('Exp %i : %r', jj, bba_input[jj])
 
             # log.info('union_focal element %r',  focal_set_union(bba_input) )
-            if focal_set_union(bba_input):
+        if focal_set_union(bba_input):
+            output = conj_combination(bba_input, log, intervall, pos_inex_union, r)
+        else:
+            app, ii_index = focal_set_get_union(bba_input)
+            # print ii_index
+            if len(ii_index) >= 2:
+                # uso la ConJ rule if two or more have  same common intervall
+                log.info('Subset of expert combined with Conj Rule %r', ii_index)
+                bba_input = [bba_input[i] for i in ii_index]
                 output = conj_combination(bba_input, log, intervall, pos_inex_union, r)
-            else:
-                app, ii_index = focal_set_get_union(bba_input)
-                # print ii_index
-                if len(ii_index) >= 2:
-                    # uso la ConJ rule if two or more have  same common intervall
-                    log.info('Subset of expert combined with Conj Rule %r', ii_index)
-                    bba_input = [bba_input[i] for i in ii_index]
-                    output = conj_combination(bba_input, log, intervall, pos_inex_union, r)
-                    # else:
-                    #   output = disj_combination (bba_input, log, intervall, out_map_set,pos_inex_union)
+                # else:
+                #   output = disj_combination (bba_input, log, intervall, out_map_set,pos_inex_union)
 
-            log.info('----- ----- -----')
+        log.info('----- ----- -----')
 
-            print output
+            #print output
             # " output basic check control
         if output > 0:
             return output
@@ -456,12 +467,13 @@ def mass_assignment_consonat_bf(log,x, model, err, weight_flag,intervall,k,r):
 
                     all_dist.append(cur_val )
                 log.info('Distance for all')
-                #all_dist= all_dist/ sum(all_dist)
+                all_dist= all_dist/ sum(all_dist)
                 log.info( ' %r', all_dist)
             dist_norm = pd.Series( all_dist,index=pos_inex_union  )
             '''
             print dist_norm
             print 'sum all', dist_norm.sum()
+
             print 'max val', dist_norm[dist_norm == dist_norm.max()]
             print 'interval', dist_norm[pos_index].sum(), dist_norm[pos_index].product() #, dist_norm[pos_index].sum()- dist_norm[dist_norm == dist_norm.max()]
             print 'interval', dist_norm[pos_index_2].sum(),dist_norm[pos_index].product() #, dist_norm[pos_index_2].sum()- dist_norm[dist_norm == dist_norm.max()]
@@ -684,7 +696,7 @@ def train_models_3(data_A,data_B):
     bound_u_80 =  ym_train_predicted + 1.2800 * np.sqrt(y_var)
     '''
     ## random sampling
-    size_train= int (data_A.shape[0] * 0.20)
+    size_train= int (data_A.shape[0] * 0.10)
     print size_train, 'over',  data_A.shape[0]
     rows = random.sample(range(data_A.shape[0]),size_train)
     data_A= data_A[rows,:]
@@ -731,7 +743,11 @@ def run_mbr(args):
         output_dir = 'mbr_output'
     else:
         if '\\' in str(args.loc_in):
+            #" comparison diffrent methods lin Ridge GP
             output_dir ="D:\\bench_mark_dataset\\Com_Methods_weight"
+            ## BF consonat  from GP
+            output_dir ="D:\\bench_mark_dataset\\BF_consonant_GP"
+
             #output_dir ="D:\\bench_mark_dataset\\saved_result_ev"
                         #saved_result_ev"
             #output_dir = str(args.loc_in) + '\\mbr_output'
@@ -849,7 +865,7 @@ def run_mbr(args):
         print 'MATCHING between RUN for  ', exp_set[fix_rep]
     # workarouand
     #for list_inter in [250]:
-        for pep_out in intersect_share[0:1] :
+        for pep_out in intersect_share :
             ## binning  of the RT space in
             list_inter = 250
             interval,l_int = create_belief_RT_interval( max_RT,min_RT, list_inter )
@@ -1029,8 +1045,7 @@ def run_mbr(args):
             #    lambda x: combine_model(x, model_save,model_err, args.w_comb ,log_mbr) ,axis=1)
 
             # GP computation
-            #test['time_base'] = test.ix[:, 5: (5 + (n_replicates - 1))].apply(
-            #   lambda x: combine_model_GP(x, model_save,model_err, args.w_comb ,log_mbr) ,axis=1)
+            test['time_base'] = test.ix[:, 5: (5 + (n_replicates - 1))].apply(  lambda x: combine_model_GP(x, model_save,model_err, args.w_comb ,log_mbr) ,axis=1)
             test['time_ev'] = test.ix[:, 5: (5 + (n_replicates - 1))].apply(lambda x:combine_model_GP_consonant_bf(x, model_save, model_err, args.w_comb, log_mbr, interval, 0.5,(l_int /2)) ,axis=1)
 
 
