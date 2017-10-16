@@ -10,12 +10,13 @@ import re
 from itertools import chain, combinations
 
 import GPy
+import GPflow
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 from sklearn import linear_model
 from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import silhouette_score ,mean_absolute_error
 from statsmodels.sandbox.regression.predstd import wls_prediction_std
 
 from pyds import MassFunction
@@ -639,15 +640,39 @@ def combine_model_GP(x, model, err, weight_flag,log):
         return float(app_sum) / float(np.where(~ np.isnan(x))[0].shape[0])
 
 
+def prediction_one_model_local_gp(x, model,cluster,log):
+   
+    x = x.filter(regex=("rt_*"))
+    x.fillna(x.mean(),inplace=True)
+
+    x_point_t= np.reshape(x[0:10],(1,x[0:10].shape[0]))
+    
+    model_index = cluster.predict(x_point_t)
+    
+    
+    mean, var = model[model_index].predict_y(  x_point_t) 
+
+    #print mean 
+    #print mean, mean[:,0] - 2*np.sqrt(var[:,0]), mean[:,0] + 2*np.sqrt(var[:,0])
+    
+    return mean[0][0]
+    
+
 
 # combination of rt predicted by each single model
 def prediction_one_model(x, model,log,flag):
+   
+    x = x.filter(regex=("rt_*"))
 
-    x = x.values.reshape(1, x.shape[0])
+    
+    x.fillna(x.mean(),inplace=True)
+    #print x
+
+    x = x.values.reshape(1 , x.shape[0] )
     if flag==2:
         pred ,var =  model.predict( x,include_likelihood=False)
     else:
-        pred = model.predict(x,)
+        pred = model.predict(x)
         # output not weight
     return  pred[0][0]
 
@@ -737,6 +762,26 @@ def train_models_2_ridge(data_A,data_B):
 
     return clf_final, clf_final.predict(data_B)
 
+def train_local_gp(data_A,data_B,n_cluster_input):
+    kmeans = KMeans(n_clusters=n_cluster_input, random_state=0).fit(data_B)
+    models=[]
+    for k_c in range(0,n_cluster_input):
+        print 'cluster ', k_c, 'size', data_B[np.where(kmeans.labels_ == k_c)].shape
+        print  'RT of the clustermax min :',data_A[np.where(kmeans.labels_ == k_c)].min(), data_A[np.where(kmeans.labels_ == k_c)].max()
+        print  'RT Delta in the cluste r: ',data_A[np.where(kmeans.labels_ == k_c)].max() - data_A[np.where(kmeans.labels_ == k_c)].min()
+        print '--'
+        models.append( train_models_GP_flow(data_A[np.where(kmeans.labels_ == k_c)],data_B[np.where(kmeans.labels_ == k_c)] ))
+
+    return models ,kmeans
+
+def train_models_GP_flow(data_A,data_B):
+    k = GPflow.kernels.RBF(input_dim=10)
+    m = GPflow.gpr.GPR(data_B, data_A, kern=k)
+    m.optimize()
+    mean, var = m.predict_y(  data_B)
+
+    return m # , ym_train_predicted
+
 def train_models_3(data_A,data_B):
 
     ## random sampling
@@ -806,10 +851,10 @@ def run_mbr(args):
     if str(args.loc_in) == '':
         output_dir = 'mbr_output'
     else:
-        if '\\' in str(args.loc_in):
+        if '/' in str(args.loc_in):
 
             ## lukas data
-            output_dir = "D:\\workspace\\\RT_data_benchmark\\"
+            output_dir = "../RT_data_benchmark/"
                       #   "#MonoModel_missing_fillrowmean_RR\\"
 
 
@@ -907,7 +952,7 @@ def run_mbr(args):
 
     log_mbr = logging.getLogger('MBR module')
     log_mbr.setLevel(logging.INFO)
-    w_mbr = logging.FileHandler(args.loc_in + '/' + args.log_label + '_' + 'mbr_.log', mode='w')
+    w_mbr = logging.FileHandler(args.loc_in + '/' + args.log_label + '_' + '_monoModel_mbr_.log', mode='w')
     w_mbr.setLevel(logging.INFO)
     log_mbr.addHandler(w_mbr)
 
@@ -924,7 +969,7 @@ def run_mbr(args):
     #print 'MATCHING between RUN for  ', exp_set[fix_rep]
     ## list_inter: contains the  size of the interval
     ## pep_out : feature leaved out
-    for fix_rep in [1]:
+    for fix_rep in [0]:
         out_df =pd.DataFrame(columns=['prot', 'peptide', 'charge', 'mz', 'rt_0', 'rt_1', 'rt_2',
        'rt_3', 'rt_4', 'rt_5', 'rt_6', 'rt_7', 'rt_8', 'rt_9','time_base',  'rt'])
 
@@ -932,7 +977,8 @@ def run_mbr(args):
         print 'MATCHING between RUN for  ', exp_set[fix_rep]
     # workarouand
     #for list_inter in [250]:
-        for pep_out in intersect_share[0:1000] :
+        #['AHEILESR_953.493_2','AIDKPFLLPIEDVFSISGR_2116.1568_3','AIDMHISNLR_1168.6022_3','AGNGETILTSELYTSK_1683.8203_2']
+        for pep_out  in intersect_share[0:500]:
             print '-- ', pep_out ,'-- '
             ## binning  of the RT space in
             list_inter = 130
@@ -1010,7 +1056,7 @@ def run_mbr(args):
 
             #option for data export
             #df['Y'] = df2['Y']
-            #df.to_csv('D:\\workspace\\RT_data_benchmark\\NOTEBOOK-GP_test_stuff_doc\\mono_model_test', sep='\t', index=False)
+            #df.to_csv('../RT_data_benchmark/mono_model_test.data', sep='\t', index=False)
             #del df2
             ## filling Na value
             df= data_inputing(df)
@@ -1025,14 +1071,21 @@ def run_mbr(args):
             Y = np.reshape(Y, [Y.shape[0], 1])
 
             ## train model
-            model ,predicted_train  = train_models_2_ridge(Y,X)
-            selec_model=1
-            print model.intercept_, model.coef_
-            '''
-            model, predicted_train = train_models_3(Y, X)
-            selec_model=2
-            print X.shape, mean_absolute_error(Y,predicted_train )
-            '''
+            #model ,predicted_train  = train_models_2_ridge(Y,X)
+            #selec_model=1
+            #print model.intercept_, model.coef_
+            #print X.shape, mean_absolute_error(Y,predicted_train )
+            #'''
+            # original model with GPy
+            #model, predicted_train = train_models_3(Y, X)
+            #GP flow
+            #model,predicted_train = train_models_GP_flow(Y,X)
+            # local GP version GPflow
+            models, cluster_model = train_local_gp(Y,X,7)
+            # not used in local GP
+            #selec_model=2
+            #print X.shape, mean_absolute_error(Y,predicted_train )
+            #'''
 
             ## from here we have to deal with one one model
 
@@ -1096,9 +1149,11 @@ def run_mbr(args):
             if test.shape[0]>1:
                 print 'nooo'
 
-            test['time_base']= 100
-            #test['time_base'] = test.ix[:, 4: (5 + (n_replicates - 1))].apply( lambda x: prediction_one_model(x, model,log_mbr,selec_model) ,axis=1)
-
+            #test['time_base']= 100
+           
+            #test['time_base'] = test.ix[:,:].apply( lambda x: prediction_one_model(x, model,log_mbr,selec_model) ,axis=1)
+            #  local GP
+            test['time_base'] = test.ix[:,:].apply( lambda x: prediction_one_model_local_gp(x, models, cluster_model,log_mbr) ,axis=1)
             #test['rt_pred_width'] = test.ix[:, 4: (4 + (n_replicates - 1))].apply( lambda x: prediction_rt_unc_wind_one_model(x, model, log_mbr), axis=1)
 
 
@@ -1114,7 +1169,7 @@ def run_mbr(args):
     ## print the entire file
     ## the file contains only the shared peptide LOO founded
         print 'final dataframe',out_df.shape
-        out_df.to_csv(path_or_buf= output_dir + '/' + str(os.path.split(exp_set[jj])[1].split('.')[0]) + '_match.txt',sep='\t',index=False)
+        out_df.to_csv(path_or_buf= output_dir + '/' + str(os.path.split(exp_set[jj])[1].split('.')[0]) + 'localGP_monoModel_match.txt',sep='\t',index=False)
         print 'rimetto i pep tolti per LO0'
         exp_t[fix_rep ]= c_data[fix_rep]
     #log_mbr.info('Before adding %s contains %i ', exp_set[jj], exp_t[jj].shape[0])
